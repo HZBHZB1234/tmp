@@ -1,0 +1,50 @@
+name: Download Unity 6000.3.12f1 Windows IL2CPP module
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download module installer from global Unity CDN
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.unity3d.com/download_unity/fca03ac9b0d5/TargetSupportInstaller/UnitySetup-Windows-IL2CPP-Support-for-Editor-6000.3.12f1.exe'
+          $name = 'UnitySetup-Windows-IL2CPP-Support-for-Editor-6000.3.12f1.exe'
+          $expectedMd5 = '3a9ae85f2243a1171ccb8d9dea9885ca'
+          $expectedSize = 249833104
+
+          Write-Host "Downloading $url"
+          curl.exe -L --fail --retry 3 --retry-delay 5 -o $name $url
+          if ($LASTEXITCODE -ne 0) { throw "curl failed with exit code $LASTEXITCODE" }
+
+          $fi = Get-Item $name
+          Write-Host "Downloaded bytes: $($fi.Length) (expected $expectedSize)"
+          if ($fi.Length -ne $expectedSize) { throw "Size mismatch: got $($fi.Length), expected $expectedSize" }
+
+          $md5 = (Get-FileHash -Algorithm MD5 -Path $name).Hash.ToLower()
+          Write-Host "MD5: $md5 (expected $expectedMd5)"
+          if ($md5 -ne $expectedMd5) { throw "MD5 mismatch" }
+
+          "MODULE_MD5=$md5" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "MODULE_SIZE=$($fi.Length)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "MODULE_NAME=$name" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: unity-6000.3.12f1-windows-il2cpp
+          name: Unity 6000.3.12f1 Windows IL2CPP Build Support
+          body: |
+            Windows Build Support (IL2CPP) for Unity 6000.3.12f1 (changeset fca03ac9b0d5).
+            MD5: ${{ env.MODULE_MD5 }}
+            Size: ${{ env.MODULE_SIZE }} bytes
+          files: ${{ env.MODULE_NAME }}
+          fail_on_unmatched_files: true
